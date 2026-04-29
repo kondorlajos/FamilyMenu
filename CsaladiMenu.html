@@ -215,6 +215,12 @@
   .btn-full.secondary { background: var(--surface2); color: var(--text); border: 0.5px solid var(--border); }
   .btn-full.danger { background: var(--red-bg); color: var(--red); }
   .btn-full.nosalty { background: var(--blue-bg); color: var(--blue); border: 0.5px solid var(--border); }
+  .btn-sm.nosalty { background: var(--blue-bg); color: var(--blue); border-color: var(--blue); }
+  .meal-pick-btn {
+    flex:1; padding:9px 4px; border:0.5px solid var(--border2); border-radius:var(--radius);
+    background:var(--surface2); color:var(--text); font-size:13px; cursor:pointer; transition:all 0.15s;
+  }
+  .meal-pick-btn.selected { background:var(--accent); color:white; border-color:var(--accent); }
 
   /* ---- SHOPPING VIEW ---- */
   .shopping-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px; }
@@ -371,8 +377,11 @@
 
     <div class="modal-actions">
       <button class="btn-full nosalty" onclick="openNosalty()">🔍 Megnyitás Nosalty.hu-n</button>
+      <label style="display:flex;align-items:center;gap:10px;padding:4px 0 8px;cursor:pointer;">
+        <input type="checkbox" id="add-to-shopping-check" style="width:20px;height:20px;accent-color:var(--accent);cursor:pointer;">
+        <span style="font-size:14px;color:var(--text2);">Hozzáadás a bevásárlólistához is</span>
+      </label>
       <button class="btn-full primary" onclick="saveMeal()">💾 Mentés</button>
-      <button class="btn-full secondary" id="add-to-shopping-btn" onclick="addMealToShopping()">🛒 Hozzáadás a bevásárlólistához</button>
       <button class="btn-full danger" id="delete-meal-btn" onclick="deleteMeal()" style="display:none">Törlés</button>
       <button class="btn-full secondary" onclick="closeMealModal()">Mégse</button>
     </div>
@@ -401,9 +410,44 @@
       <button class="btn-sm" onclick="addRecipeIngredientRow()" style="margin-top:8px; width:100%">+ Hozzávaló hozzáadása</button>
     </div>
     <div class="modal-actions">
+      <button class="btn-full secondary" onclick="openAssignRecipeToDay()">📅 Hozzáadás naphoz</button>
+      <button class="btn-full secondary" onclick="addRecipeToShopping()">🛒 Bevásárlólistához adás</button>
       <button class="btn-full primary" onclick="saveRecipe()">💾 Recept mentése</button>
       <button class="btn-full danger" id="delete-recipe-btn" onclick="deleteRecipe()" style="display:none">Recept törlése</button>
       <button class="btn-full secondary" onclick="closeRecipeModal()">Mégse</button>
+    </div>
+  </div>
+</div>
+
+<!-- ASSIGN RECIPE TO DAY MODAL -->
+<div class="modal-overlay" id="assign-modal" onclick="closeAssignModal(event)">
+  <div class="modal">
+    <div class="modal-handle"></div>
+    <div class="modal-title">Naphoz adás</div>
+    <div class="modal-context" id="assign-modal-recipe-name"></div>
+    <div class="modal-section">
+      <label class="modal-label">Nap</label>
+      <select class="modal-input" id="assign-date-select"></select>
+    </div>
+    <div class="modal-section" style="padding-top:4px;">
+      <label class="modal-label">Étkezés</label>
+      <div style="display:flex;gap:8px;margin-top:4px;">
+        <button class="meal-pick-btn" data-meal="reggeli" onclick="selectAssignMeal(this)">☕ Reggeli</button>
+        <button class="meal-pick-btn" data-meal="ebéd" onclick="selectAssignMeal(this)">🍽️ Ebéd</button>
+        <button class="meal-pick-btn" data-meal="vacsora" onclick="selectAssignMeal(this)">🌙 Vacsora</button>
+      </div>
+    </div>
+    <div class="modal-section" style="padding-top:4px;">
+      <label class="modal-label">Személyek száma</label>
+      <div style="display:flex;gap:6px;align-items:center;margin-top:4px;">
+        <button class="btn-sm" onclick="changeAssignServings(-1)" style="width:32px;height:32px;padding:0;font-size:16px;">−</button>
+        <span id="assign-servings-val" style="font-size:15px;font-weight:600;min-width:24px;text-align:center;">4</span>
+        <button class="btn-sm" onclick="changeAssignServings(1)" style="width:32px;height:32px;padding:0;font-size:16px;">+</button>
+      </div>
+    </div>
+    <div class="modal-actions">
+      <button class="btn-full primary" onclick="confirmAssignRecipe()">📅 Hozzáadás a menühez</button>
+      <button class="btn-full secondary" onclick="closeAssignModal()">Mégse</button>
     </div>
   </div>
 </div>
@@ -414,7 +458,8 @@
 // ============================================================
 // STATE
 // ============================================================
-let API_URL = localStorage.getItem('csaladiMenuApi') || '';
+const HARDCODED_API_URL = 'https://script.google.com/macros/s/AKfycbzZzPd3oYxR2pZcwcg3qY4n0pe-5-i9LxMHoU8kq8ldG7H_qEy0VoW4jhnHSJ37dVK17Q/exec';
+let API_URL = HARDCODED_API_URL || localStorage.getItem('csaladiMenuApi') || '';
 let DEFAULT_SERVINGS = parseInt(localStorage.getItem('csaladiMenuServings') || '4');
 let weekOffset = 0; // current week offset from today
 let menuData = []; // [{date, meal, dish, recipeId, servings}]
@@ -563,7 +608,7 @@ function renderWeek() {
   dates.forEach((date, idx) => {
     const ds = dateStr(date);
     const isToday = ds === today;
-    const dayMenuItems = menuData.filter(m => m.date === ds);
+    const dayMenuItems = menuData.filter(m => String(m.date).substring(0,10) === ds);
 
     const card = document.createElement('div');
     card.className = 'day-card';
@@ -689,6 +734,14 @@ function renderIngredientList(containerId, ingredients, forServings, baseServing
   });
 }
 
+function getKnownUnits() {
+  const units = new Set();
+  recipes.forEach(r => r.ingredients.forEach(i => { if (i.unit) units.add(i.unit); }));
+  const defaults = ['g','dkg','kg','ml','dl','l','db','ek','tk','csésze','csipet','csomag','szelet'];
+  defaults.forEach(u => units.add(u));
+  return [...units];
+}
+
 function addIngredientRow(containerId = 'ingredient-list', ing = null, forServings = null, baseServings = null) {
   const container = document.getElementById(containerId);
   const row = document.createElement('div');
@@ -696,11 +749,23 @@ function addIngredientRow(containerId = 'ingredient-list', ing = null, forServin
 
   const scale = (forServings && baseServings && baseServings > 0) ? forServings / baseServings : 1;
   const scaledAmt = ing?.amount ? Math.round(parseFloat(ing.amount) * scale * 100) / 100 : '';
+  const listId = 'units-list-' + containerId;
+
+  if (!document.getElementById(listId)) {
+    const dl = document.createElement('datalist');
+    dl.id = listId;
+    getKnownUnits().forEach(u => {
+      const opt = document.createElement('option');
+      opt.value = u;
+      dl.appendChild(opt);
+    });
+    document.body.appendChild(dl);
+  }
 
   row.innerHTML = `
     <input class="ing-name" type="text" placeholder="Hozzávaló" value="${ing?.name || ''}">
     <input class="ing-amount" type="number" placeholder="Mennyi" value="${scaledAmt || ing?.amount || ''}">
-    <input class="ing-unit" type="text" placeholder="egység" value="${ing?.unit || ''}">
+    <input class="ing-unit" type="text" placeholder="egység" value="${ing?.unit || ''}" list="${listId}">
     <button class="del-btn" onclick="this.parentElement.remove()">×</button>
   `;
   container.appendChild(row);
@@ -719,8 +784,8 @@ async function saveMeal() {
   const dish = document.getElementById('meal-dish-input').value.trim();
   if (!dish) { toast('Add meg az étel nevét!'); return; }
 
-  // Ha van hozzávaló és nincs recept mentve, felajánljuk receptként való mentést
   const ings = getIngredients('ingredient-list');
+  const addToShopping = document.getElementById('add-to-shopping-check').checked;
 
   try {
     await api('setMeal', {
@@ -731,7 +796,6 @@ async function saveMeal() {
       servings: currentServings
     });
 
-    // Ha vannak hozzávalók és nincs kijelölt recept, mentsük el új receptként
     if (ings.length > 0 && !editingRecipeId) {
       const result = await api('saveRecipe', {
         name: dish,
@@ -742,9 +806,15 @@ async function saveMeal() {
       await api('setMeal', { date: editingDate, meal: editingMeal, dish, recipeId: result.id, servings: currentServings });
     }
 
+    if (addToShopping && ings.length > 0) {
+      await api('addShoppingItems', {
+        items: JSON.stringify(ings.map(i => ({ ingredient: i.name, amount: i.amount, unit: i.unit })))
+      });
+    }
+
     await fetchAll();
     document.getElementById('meal-modal').classList.remove('open');
-    toast('Mentve! ✓');
+    toast(addToShopping && ings.length > 0 ? 'Mentve + bevásárlólistához adva! ✓' : 'Mentve! ✓');
   } catch(e) {
     toast('Hiba: ' + e.message);
   }
@@ -771,9 +841,10 @@ async function addMealToShopping() {
   } catch(e) { toast('Hiba: ' + e.message); }
 }
 
-function openNosalty() {
-  const dish = document.getElementById('meal-dish-input').value.trim() || editingMeal;
-  const url = `https://www.nosalty.hu/recept?q=${encodeURIComponent(dish)}`;
+function openNosalty(recipeName) {
+  const dish = recipeName || document.getElementById('meal-dish-input').value.trim();
+  if (!dish) { toast('Add meg az étel nevét először!'); return; }
+  const url = `https://www.nosalty.hu/kereses/recept/${encodeURIComponent(dish)}?`;
   window.open(url, '_blank');
 }
 
@@ -886,12 +957,15 @@ function renderRecipes() {
   recipes.forEach(r => {
     const card = document.createElement('div');
     card.className = 'recipe-card';
-    card.onclick = () => openRecipeModal(r);
     const ingPreview = r.ingredients.slice(0, 4).map(i => i.name).join(', ') + (r.ingredients.length > 4 ? '...' : '');
     card.innerHTML = `
       <div class="recipe-card-name">${r.name}</div>
       <div class="recipe-card-meta">${r.servings} személyre · ${r.ingredients.length} hozzávaló</div>
       ${ingPreview ? `<div class="recipe-card-ings">${ingPreview}</div>` : ''}
+      <div style="margin-top:10px;display:flex;gap:8px;">
+        <button class="btn-sm" onclick="event.stopPropagation();openRecipeModal(recipes.find(x=>x.id==='${r.id}'))" style="flex:1">✏️ Szerkesztés</button>
+        <button class="btn-sm nosalty" onclick="event.stopPropagation();openNosalty('${r.name.replace(/'/g,"\\'")}')">🔍 Nosalty</button>
+      </div>
     `;
     container.appendChild(card);
   });
@@ -956,8 +1030,91 @@ async function deleteRecipe() {
 }
 
 // ============================================================
-// UTILS
+// ASSIGN RECIPE TO DAY
 // ============================================================
+let assignRecipeId = null;
+let assignServings = 4;
+let assignMeal = 'ebéd';
+
+function openAssignRecipeToDay() {
+  assignRecipeId = editingRecipeId;
+  if (!assignRecipeId) { toast('Mentsd el a receptet először!'); return; }
+  const recipe = recipes.find(r => r.id === assignRecipeId);
+  if (!recipe) return;
+
+  assignServings = recipe.servings || DEFAULT_SERVINGS;
+  assignMeal = 'ebéd';
+
+  document.getElementById('assign-modal-recipe-name').textContent = recipe.name;
+  document.getElementById('assign-servings-val').textContent = assignServings;
+
+  // Kitöltjük a dátum selectet: ma + 13 nap
+  const sel = document.getElementById('assign-date-select');
+  sel.innerHTML = '';
+  const today = new Date();
+  today.setHours(0,0,0,0);
+  for (let i = 0; i < 14; i++) {
+    const d = new Date(today);
+    d.setDate(today.getDate() + i);
+    const ds = dateStr(d);
+    const label = i === 0 ? 'Ma' : i === 1 ? 'Holnap' : `${DAY_NAMES_FULL[d.getDay() === 0 ? 6 : d.getDay()-1]}, ${d.getMonth()+1}.${String(d.getDate()).padStart(2,'0')}`;
+    const opt = document.createElement('option');
+    opt.value = ds;
+    opt.textContent = label;
+    sel.appendChild(opt);
+  }
+
+  document.querySelectorAll('.meal-pick-btn').forEach(b => {
+    b.classList.toggle('selected', b.dataset.meal === assignMeal);
+  });
+
+  document.getElementById('recipe-modal').classList.remove('open');
+  document.getElementById('assign-modal').classList.add('open');
+}
+
+function selectAssignMeal(btn) {
+  assignMeal = btn.dataset.meal;
+  document.querySelectorAll('.meal-pick-btn').forEach(b => b.classList.toggle('selected', b === btn));
+}
+
+function changeAssignServings(delta) {
+  assignServings = Math.max(1, assignServings + delta);
+  document.getElementById('assign-servings-val').textContent = assignServings;
+}
+
+function closeAssignModal(e) {
+  if (e && e.target !== document.getElementById('assign-modal')) return;
+  document.getElementById('assign-modal').classList.remove('open');
+}
+
+async function confirmAssignRecipe() {
+  const date = document.getElementById('assign-date-select').value;
+  const recipe = recipes.find(r => r.id === assignRecipeId);
+  if (!recipe || !date || !assignMeal) return;
+  try {
+    await api('setMeal', {
+      date, meal: assignMeal, dish: recipe.name,
+      recipeId: assignRecipeId, servings: assignServings
+    });
+    await fetchAll();
+    document.getElementById('assign-modal').classList.remove('open');
+    toast(`${recipe.name} hozzáadva a menühöz! ✓`);
+  } catch(e) { toast('Hiba: ' + e.message); }
+}
+
+async function addRecipeToShopping() {
+  const recipe = recipes.find(r => r.id === editingRecipeId);
+  if (!recipe || recipe.ingredients.length === 0) { toast('Nincs hozzávaló a receptben'); return; }
+  try {
+    await api('addShoppingItems', {
+      items: JSON.stringify(recipe.ingredients.map(i => ({ ingredient: i.name, amount: i.amount, unit: i.unit })))
+    });
+    await fetchAll();
+    toast('Hozzávalók a bevásárlólistán! 🛒');
+  } catch(e) { toast('Hiba: ' + e.message); }
+}
+
+
 function switchTab(tab) {
   document.querySelectorAll('.tab-btn').forEach((b, i) => {
     b.classList.toggle('active', ['menu','shopping','recipes'][i] === tab);

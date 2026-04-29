@@ -1,0 +1,979 @@
+<!DOCTYPE html>
+<html lang="hu">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<title>Családi Menü</title>
+<style>
+  :root {
+    --bg: #FAF8F3;
+    --surface: #FFFFFF;
+    --surface2: #F2EFE8;
+    --border: #E2DDD5;
+    --border2: #C8C2B8;
+    --text: #1A1815;
+    --text2: #6B6560;
+    --text3: #9E9890;
+    --accent: #C17B2E;
+    --accent-bg: #FDF3E3;
+    --accent-dark: #9A5E1A;
+    --green: #3B6D11;
+    --green-bg: #EAF3DE;
+    --red: #A32D2D;
+    --red-bg: #FCEBEB;
+    --blue: #185FA5;
+    --blue-bg: #E6F1FB;
+    --radius: 10px;
+    --radius-lg: 14px;
+    --shadow: 0 1px 4px rgba(0,0,0,0.08), 0 0 0 0.5px rgba(0,0,0,0.06);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #1A1815;
+      --surface: #252220;
+      --surface2: #2E2B27;
+      --border: #3A3630;
+      --border2: #4E4840;
+      --text: #F0EDE7;
+      --text2: #A09890;
+      --text3: #6B6560;
+      --accent: #E8A04A;
+      --accent-bg: #2C200E;
+      --accent-dark: #F5C070;
+      --green: #97C459;
+      --green-bg: #1A2E0A;
+      --red: #F09595;
+      --red-bg: #2C0D0D;
+      --blue: #85B7EB;
+      --blue-bg: #0A1C30;
+    }
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+  html, body { height: 100%; background: var(--bg); color: var(--text); font-family: -apple-system, 'SF Pro Text', 'Segoe UI', system-ui, sans-serif; font-size: 15px; }
+
+  /* ---- LAYOUT ---- */
+  #app { display: flex; flex-direction: column; height: 100vh; max-width: 680px; margin: 0 auto; }
+
+  header {
+    display: flex; align-items: center; gap: 12px;
+    padding: 14px 16px 10px;
+    border-bottom: 0.5px solid var(--border);
+    background: var(--surface);
+    position: sticky; top: 0; z-index: 10;
+  }
+  header h1 { font-size: 17px; font-weight: 600; letter-spacing: -0.2px; flex: 1; }
+  header .subtitle { font-size: 11px; color: var(--text3); font-weight: 400; }
+
+  #config-btn {
+    background: none; border: none; padding: 6px; cursor: pointer;
+    color: var(--text2); font-size: 18px; border-radius: 6px;
+    transition: background 0.15s;
+  }
+  #config-btn:hover { background: var(--surface2); }
+
+  /* ---- TABS ---- */
+  #tabs {
+    display: flex; background: var(--surface); border-bottom: 0.5px solid var(--border);
+  }
+  .tab-btn {
+    flex: 1; padding: 11px 8px; border: none; background: none; cursor: pointer;
+    font-size: 13px; font-weight: 500; color: var(--text2);
+    border-bottom: 2px solid transparent; transition: all 0.15s;
+  }
+  .tab-btn.active { color: var(--accent); border-bottom-color: var(--accent); }
+  .tab-btn .tab-count {
+    display: inline-block; background: var(--accent); color: white;
+    font-size: 10px; padding: 1px 5px; border-radius: 8px; margin-left: 4px;
+  }
+
+  /* ---- MAIN CONTENT ---- */
+  #content { flex: 1; overflow-y: auto; padding: 0; }
+  .view { display: none; padding: 16px; }
+  .view.active { display: block; }
+
+  /* ---- API CONFIG PANEL ---- */
+  #config-panel {
+    display: none; padding: 16px;
+    background: var(--accent-bg); border-bottom: 0.5px solid var(--border);
+  }
+  #config-panel.open { display: block; }
+  #config-panel label { font-size: 12px; color: var(--text2); display: block; margin-bottom: 4px; }
+  #config-panel input {
+    width: 100%; padding: 9px 11px; border: 0.5px solid var(--border2);
+    border-radius: var(--radius); background: var(--surface); color: var(--text);
+    font-size: 13px; margin-bottom: 8px;
+  }
+  .config-row { display: flex; gap: 8px; }
+  .btn-sm {
+    padding: 8px 14px; border: 0.5px solid var(--border2); border-radius: var(--radius);
+    background: var(--surface); color: var(--text); font-size: 13px; cursor: pointer;
+    transition: background 0.15s; white-space: nowrap;
+  }
+  .btn-sm:hover { background: var(--surface2); }
+  .btn-sm.primary { background: var(--accent); color: white; border-color: var(--accent); }
+  .btn-sm.primary:hover { background: var(--accent-dark); }
+  .status-msg { font-size: 12px; padding: 6px 0; }
+  .status-msg.ok { color: var(--green); }
+  .status-msg.err { color: var(--red); }
+
+  /* ---- WEEK NAV ---- */
+  .week-nav {
+    display: flex; align-items: center; gap: 8px;
+    margin-bottom: 14px;
+  }
+  .week-nav button {
+    width: 34px; height: 34px; border: 0.5px solid var(--border2);
+    border-radius: 8px; background: var(--surface); color: var(--text);
+    font-size: 16px; cursor: pointer; display: flex; align-items: center; justify-content: center;
+    transition: background 0.15s;
+  }
+  .week-nav button:hover { background: var(--surface2); }
+  .week-nav .week-label { flex: 1; text-align: center; font-size: 14px; font-weight: 600; }
+
+  /* ---- DAY CARDS ---- */
+  .day-card {
+    background: var(--surface); border-radius: var(--radius-lg);
+    border: 0.5px solid var(--border); margin-bottom: 10px; overflow: hidden;
+  }
+  .day-header {
+    display: flex; align-items: center; padding: 10px 14px;
+    background: var(--surface2); border-bottom: 0.5px solid var(--border);
+    cursor: pointer;
+  }
+  .day-header .day-name { font-weight: 600; font-size: 14px; flex: 1; }
+  .day-header .day-date { font-size: 12px; color: var(--text2); }
+  .day-header .day-today { background: var(--accent); color: white; font-size: 10px; padding: 2px 7px; border-radius: 6px; margin-left: 6px; }
+  .day-meals { padding: 8px 0; }
+  .meal-row {
+    display: flex; align-items: center; gap: 10px;
+    padding: 8px 14px; cursor: pointer; transition: background 0.12s;
+  }
+  .meal-row:hover { background: var(--surface2); }
+  .meal-icon { font-size: 16px; width: 22px; text-align: center; flex-shrink: 0; }
+  .meal-label { font-size: 12px; color: var(--text3); width: 54px; flex-shrink: 0; }
+  .meal-dish { flex: 1; font-size: 14px; font-weight: 500; }
+  .meal-empty { color: var(--text3); font-weight: 400; font-size: 13px; }
+  .meal-recipe-badge {
+    font-size: 10px; padding: 2px 6px; border-radius: 5px;
+    background: var(--green-bg); color: var(--green); font-weight: 500;
+  }
+  .meal-edit-icon { color: var(--text3); font-size: 14px; }
+
+  /* ---- MODAL ---- */
+  .modal-overlay {
+    display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.4);
+    z-index: 100; align-items: flex-end; justify-content: center;
+  }
+  .modal-overlay.open { display: flex; }
+  .modal {
+    background: var(--surface); border-radius: 18px 18px 0 0;
+    width: 100%; max-width: 680px; max-height: 90vh; overflow-y: auto;
+    padding: 0 0 env(safe-area-inset-bottom);
+  }
+  .modal-handle { width: 36px; height: 4px; background: var(--border2); border-radius: 2px; margin: 10px auto 16px; }
+  .modal-title { font-size: 16px; font-weight: 600; padding: 0 16px 12px; }
+  .modal-context { font-size: 12px; color: var(--text2); padding: 0 16px; margin-bottom: 14px; }
+  .modal-section { padding: 0 16px 16px; }
+  .modal-label { font-size: 12px; color: var(--text2); margin-bottom: 5px; display: block; }
+  .modal-input {
+    width: 100%; padding: 10px 12px; border: 0.5px solid var(--border2);
+    border-radius: var(--radius); background: var(--surface); color: var(--text);
+    font-size: 15px;
+  }
+  .modal-input:focus { outline: 2px solid var(--accent); outline-offset: -1px; }
+  .modal-divider { height: 0.5px; background: var(--border); margin: 4px 16px 14px; }
+
+  /* Recipe chips */
+  .recipe-chips { display: flex; flex-wrap: wrap; gap: 7px; margin-top: 6px; }
+  .recipe-chip {
+    padding: 6px 12px; border: 0.5px solid var(--border2); border-radius: 18px;
+    font-size: 13px; cursor: pointer; background: var(--surface2); color: var(--text);
+    transition: all 0.12s; white-space: nowrap;
+  }
+  .recipe-chip.selected { background: var(--accent); color: white; border-color: var(--accent); }
+  .recipe-chip:hover:not(.selected) { border-color: var(--accent); color: var(--accent); }
+
+  /* Ingredient rows */
+  .ingredient-list { display: flex; flex-direction: column; gap: 8px; margin-top: 8px; }
+  .ingredient-row { display: flex; gap: 7px; align-items: center; }
+  .ingredient-row input { padding: 9px 10px; border: 0.5px solid var(--border2); border-radius: 8px; background: var(--surface); color: var(--text); font-size: 14px; }
+  .ingredient-row .ing-name { flex: 2.5; }
+  .ingredient-row .ing-amount { flex: 1; }
+  .ingredient-row .ing-unit { flex: 1; }
+  .ingredient-row .del-btn { width: 30px; height: 30px; border: none; background: none; color: var(--text3); font-size: 18px; cursor: pointer; flex-shrink: 0; }
+  .ingredient-row .del-btn:hover { color: var(--red); }
+
+  /* Action buttons */
+  .modal-actions { padding: 8px 16px 20px; display: flex; flex-direction: column; gap: 8px; }
+  .btn-full {
+    width: 100%; padding: 13px; border-radius: var(--radius); font-size: 15px;
+    font-weight: 600; cursor: pointer; border: none; transition: all 0.15s;
+  }
+  .btn-full.primary { background: var(--accent); color: white; }
+  .btn-full.primary:hover { background: var(--accent-dark); }
+  .btn-full.secondary { background: var(--surface2); color: var(--text); border: 0.5px solid var(--border); }
+  .btn-full.danger { background: var(--red-bg); color: var(--red); }
+  .btn-full.nosalty { background: var(--blue-bg); color: var(--blue); border: 0.5px solid var(--border); }
+
+  /* ---- SHOPPING VIEW ---- */
+  .shopping-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px; }
+  .shopping-header h2 { font-size: 16px; font-weight: 600; }
+  .shopping-actions { display: flex; gap: 7px; }
+
+  .shop-section-title { font-size: 11px; font-weight: 600; color: var(--text3); text-transform: uppercase; letter-spacing: 0.5px; margin: 16px 0 8px; }
+  .shop-item {
+    display: flex; align-items: center; gap: 12px;
+    padding: 11px 14px; background: var(--surface); border-radius: 10px;
+    margin-bottom: 7px; border: 0.5px solid var(--border);
+    cursor: pointer; transition: all 0.15s;
+  }
+  .shop-item.checked { opacity: 0.5; }
+  .shop-item.checked .shop-name { text-decoration: line-through; color: var(--text3); }
+  .shop-checkbox {
+    width: 22px; height: 22px; border: 1.5px solid var(--border2);
+    border-radius: 6px; flex-shrink: 0; display: flex; align-items: center;
+    justify-content: center; transition: all 0.15s;
+  }
+  .shop-item.checked .shop-checkbox { background: var(--green); border-color: var(--green); color: white; }
+  .shop-name { flex: 1; font-size: 15px; }
+  .shop-amount { font-size: 13px; color: var(--text2); white-space: nowrap; }
+
+  .empty-state { text-align: center; padding: 48px 20px; color: var(--text3); }
+  .empty-state .emoji { font-size: 40px; margin-bottom: 12px; }
+  .empty-state p { font-size: 14px; line-height: 1.6; }
+
+  /* ---- RECIPES VIEW ---- */
+  .recipes-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px; }
+  .recipes-header h2 { font-size: 16px; font-weight: 600; }
+  .recipe-card {
+    background: var(--surface); border: 0.5px solid var(--border);
+    border-radius: var(--radius-lg); padding: 13px 14px;
+    margin-bottom: 9px; cursor: pointer; transition: all 0.15s;
+  }
+  .recipe-card:hover { border-color: var(--accent); }
+  .recipe-card-name { font-size: 15px; font-weight: 600; margin-bottom: 4px; }
+  .recipe-card-meta { font-size: 12px; color: var(--text2); }
+  .recipe-card-ings { font-size: 12px; color: var(--text3); margin-top: 5px; }
+
+  /* Loading spinner */
+  .spinner { display: inline-block; width: 16px; height: 16px; border: 2px solid var(--border); border-top-color: var(--accent); border-radius: 50%; animation: spin 0.7s linear infinite; vertical-align: middle; margin-right: 6px; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  .toast {
+    position: fixed; bottom: calc(16px + env(safe-area-inset-bottom)); left: 50%;
+    transform: translateX(-50%); background: var(--text); color: var(--bg);
+    padding: 10px 18px; border-radius: 20px; font-size: 13px; font-weight: 500;
+    z-index: 200; pointer-events: none; opacity: 0; transition: opacity 0.3s;
+    white-space: nowrap;
+  }
+  .toast.show { opacity: 1; }
+</style>
+</head>
+<body>
+
+<div id="app">
+  <header>
+    <div>
+      <h1>Családi Menü</h1>
+      <div class="subtitle" id="header-status">Nincs API beállítva</div>
+    </div>
+    <button id="config-btn" onclick="toggleConfig()" title="Beállítások">⚙️</button>
+  </header>
+
+  <!-- API CONFIG PANEL -->
+  <div id="config-panel">
+    <label>Google Apps Script Webhook URL</label>
+    <input type="url" id="api-url-input" placeholder="https://script.google.com/macros/s/.../exec">
+    <label>Személyek száma (alapértelmezett)</label>
+    <input type="number" id="default-servings" value="4" min="1" max="20">
+    <div class="config-row">
+      <button class="btn-sm primary" onclick="saveConfig()">Mentés</button>
+      <button class="btn-sm" onclick="testConnection()">Kapcsolat tesztelése</button>
+    </div>
+    <div id="config-status" class="status-msg"></div>
+  </div>
+
+  <!-- TABS -->
+  <div id="tabs">
+    <button class="tab-btn active" onclick="switchTab('menu')">📅 Menü</button>
+    <button class="tab-btn" onclick="switchTab('shopping')">🛒 Bevásárlás <span class="tab-count" id="shopping-count" style="display:none">0</span></button>
+    <button class="tab-btn" onclick="switchTab('recipes')">📖 Receptek</button>
+  </div>
+
+  <div id="content">
+    <!-- MENU VIEW -->
+    <div class="view active" id="view-menu">
+      <div class="week-nav">
+        <button onclick="changeWeek(-1)">‹</button>
+        <div class="week-label" id="week-label"></div>
+        <button onclick="changeWeek(1)">›</button>
+      </div>
+      <div id="days-container"></div>
+    </div>
+
+    <!-- SHOPPING VIEW -->
+    <div class="view" id="view-shopping">
+      <div class="shopping-header">
+        <h2>Bevásárlólista</h2>
+        <div class="shopping-actions">
+          <button class="btn-sm" onclick="clearChecked()">Kész törlése</button>
+          <button class="btn-sm danger" onclick="clearAll()">Mind törlése</button>
+        </div>
+      </div>
+      <div id="shopping-container"></div>
+    </div>
+
+    <!-- RECIPES VIEW -->
+    <div class="view" id="view-recipes">
+      <div class="recipes-header">
+        <h2>Receptek</h2>
+        <button class="btn-sm primary" onclick="openNewRecipe()">+ Új recept</button>
+      </div>
+      <div id="recipes-container"></div>
+    </div>
+  </div>
+</div>
+
+<!-- MEAL EDIT MODAL -->
+<div class="modal-overlay" id="meal-modal" onclick="closeMealModal(event)">
+  <div class="modal">
+    <div class="modal-handle"></div>
+    <div class="modal-title" id="meal-modal-title">Étel beállítása</div>
+    <div class="modal-context" id="meal-modal-context"></div>
+
+    <div class="modal-section">
+      <label class="modal-label">Étel neve</label>
+      <input class="modal-input" type="text" id="meal-dish-input" placeholder="pl. Paprikás krumpli">
+    </div>
+
+    <div class="modal-divider"></div>
+
+    <div class="modal-section">
+      <label class="modal-label">Meglévő receptből</label>
+      <div class="recipe-chips" id="recipe-chips"></div>
+    </div>
+
+    <div class="modal-divider"></div>
+
+    <div class="modal-section">
+      <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:8px;">
+        <label class="modal-label" style="margin:0">Hozzávalók <span style="color:var(--text3);font-size:11px">(személyek: <span id="servings-display">4</span>)</span></label>
+        <div style="display:flex;gap:6px;align-items:center;">
+          <button class="btn-sm" onclick="changeServings(-1)" style="width:28px;height:28px;padding:0;font-size:16px;border-radius:6px;">−</button>
+          <span id="servings-val" style="font-size:14px;font-weight:600;min-width:20px;text-align:center;">4</span>
+          <button class="btn-sm" onclick="changeServings(1)" style="width:28px;height:28px;padding:0;font-size:16px;border-radius:6px;">+</button>
+        </div>
+      </div>
+      <div class="ingredient-list" id="ingredient-list"></div>
+      <button class="btn-sm" onclick="addIngredientRow()" style="margin-top:8px; width:100%">+ Hozzávaló hozzáadása</button>
+    </div>
+
+    <div class="modal-actions">
+      <button class="btn-full nosalty" onclick="openNosalty()">🔍 Megnyitás Nosalty.hu-n</button>
+      <button class="btn-full primary" onclick="saveMeal()">💾 Mentés</button>
+      <button class="btn-full secondary" id="add-to-shopping-btn" onclick="addMealToShopping()">🛒 Hozzáadás a bevásárlólistához</button>
+      <button class="btn-full danger" id="delete-meal-btn" onclick="deleteMeal()" style="display:none">Törlés</button>
+      <button class="btn-full secondary" onclick="closeMealModal()">Mégse</button>
+    </div>
+  </div>
+</div>
+
+<!-- RECIPE EDIT MODAL -->
+<div class="modal-overlay" id="recipe-modal" onclick="closeRecipeModal(event)">
+  <div class="modal">
+    <div class="modal-handle"></div>
+    <div class="modal-title" id="recipe-modal-title">Recept</div>
+    <div class="modal-section">
+      <label class="modal-label">Recept neve</label>
+      <input class="modal-input" type="text" id="recipe-name-input" placeholder="pl. Paprikás krumpli">
+    </div>
+    <div class="modal-section" style="padding-top:4px;">
+      <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:8px;">
+        <label class="modal-label" style="margin:0">Hozzávalók <span style="color:var(--text3);font-size:11px">(személyek: <span id="recipe-servings-display">4</span>)</span></label>
+        <div style="display:flex;gap:6px;align-items:center;">
+          <button class="btn-sm" onclick="changeRecipeServings(-1)" style="width:28px;height:28px;padding:0;font-size:16px;border-radius:6px;">−</button>
+          <span id="recipe-servings-val" style="font-size:14px;font-weight:600;min-width:20px;text-align:center;">4</span>
+          <button class="btn-sm" onclick="changeRecipeServings(1)" style="width:28px;height:28px;padding:0;font-size:16px;border-radius:6px;">+</button>
+        </div>
+      </div>
+      <div class="ingredient-list" id="recipe-ingredient-list"></div>
+      <button class="btn-sm" onclick="addRecipeIngredientRow()" style="margin-top:8px; width:100%">+ Hozzávaló hozzáadása</button>
+    </div>
+    <div class="modal-actions">
+      <button class="btn-full primary" onclick="saveRecipe()">💾 Recept mentése</button>
+      <button class="btn-full danger" id="delete-recipe-btn" onclick="deleteRecipe()" style="display:none">Recept törlése</button>
+      <button class="btn-full secondary" onclick="closeRecipeModal()">Mégse</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+// ============================================================
+// STATE
+// ============================================================
+let API_URL = localStorage.getItem('csaladiMenuApi') || '';
+let DEFAULT_SERVINGS = parseInt(localStorage.getItem('csaladiMenuServings') || '4');
+let weekOffset = 0; // current week offset from today
+let menuData = []; // [{date, meal, dish, recipeId, servings}]
+let recipes = []; // [{id, name, servings, ingredients}]
+let shopping = []; // [{id, ingredient, amount, unit, checked}]
+
+// Current modal state
+let editingDate = null;
+let editingMeal = null;
+let editingRecipeId = null;
+let currentServings = DEFAULT_SERVINGS;
+let currentRecipeServings = DEFAULT_SERVINGS;
+
+const MEALS = [
+  { key: 'reggeli', label: 'Reggeli', icon: '☕' },
+  { key: 'ebéd', label: 'Ebéd', icon: '🍽️' },
+  { key: 'vacsora', label: 'Vacsora', icon: '🌙' }
+];
+
+// ============================================================
+// INIT
+// ============================================================
+document.addEventListener('DOMContentLoaded', () => {
+  loadConfig();
+  renderWeek();
+  if (API_URL) {
+    fetchAll();
+  }
+});
+
+function loadConfig() {
+  document.getElementById('api-url-input').value = API_URL;
+  document.getElementById('default-servings').value = DEFAULT_SERVINGS;
+  updateHeaderStatus();
+}
+
+function saveConfig() {
+  API_URL = document.getElementById('api-url-input').value.trim();
+  DEFAULT_SERVINGS = parseInt(document.getElementById('default-servings').value) || 4;
+  currentServings = DEFAULT_SERVINGS;
+  localStorage.setItem('csaladiMenuApi', API_URL);
+  localStorage.setItem('csaladiMenuServings', DEFAULT_SERVINGS);
+  updateHeaderStatus();
+  showStatus('Beállítások mentve!', 'ok');
+  if (API_URL) fetchAll();
+}
+
+async function testConnection() {
+  if (!API_URL) { showStatus('Nincs URL megadva!', 'err'); return; }
+  showStatus('Kapcsolódás...', '');
+  try {
+    const res = await api('getMenu');
+    showStatus('Kapcsolat sikeres! ✓', 'ok');
+  } catch (e) {
+    showStatus('Hiba: ' + e.message, 'err');
+  }
+}
+
+function showStatus(msg, type) {
+  const el = document.getElementById('config-status');
+  el.textContent = msg;
+  el.className = 'status-msg ' + type;
+}
+
+function updateHeaderStatus() {
+  const el = document.getElementById('header-status');
+  el.textContent = API_URL ? 'Szinkronizálva' : 'Nincs API beállítva';
+  el.style.color = API_URL ? 'var(--green)' : 'var(--text3)';
+}
+
+function toggleConfig() {
+  document.getElementById('config-panel').classList.toggle('open');
+}
+
+// ============================================================
+// API
+// ============================================================
+async function api(action, params = {}) {
+  if (!API_URL) throw new Error('API URL nincs beállítva!');
+  const url = new URL(API_URL);
+  url.searchParams.set('action', action);
+  Object.entries(params).forEach(([k, v]) => url.searchParams.set(k, v));
+  const res = await fetch(url.toString());
+  const data = await res.json();
+  if (!data.ok) throw new Error(data.error || 'Ismeretlen hiba');
+  return data.data;
+}
+
+async function fetchAll() {
+  try {
+    [menuData, recipes, shopping] = await Promise.all([
+      api('getMenu'),
+      api('getRecipes'),
+      api('getShopping')
+    ]);
+    renderWeek();
+    renderShopping();
+    renderRecipes();
+    updateShoppingCount();
+  } catch (e) {
+    // silent - no API configured yet
+  }
+}
+
+// ============================================================
+// WEEK / MENU VIEW
+// ============================================================
+function getWeekDates() {
+  const today = new Date();
+  today.setHours(0,0,0,0);
+  const mon = new Date(today);
+  mon.setDate(today.getDate() - today.getDay() + 1 + weekOffset * 7);
+  const dates = [];
+  for (let i = 0; i < 7; i++) {
+    const d = new Date(mon);
+    d.setDate(mon.getDate() + i);
+    dates.push(d);
+  }
+  return dates;
+}
+
+function dateStr(d) {
+  return d.toISOString().split('T')[0];
+}
+
+const DAY_NAMES = ['H', 'K', 'Sze', 'Cs', 'P', 'Szo', 'V'];
+const DAY_NAMES_FULL = ['Hétfő', 'Kedd', 'Szerda', 'Csütörtök', 'Péntek', 'Szombat', 'Vasárnap'];
+
+function changeWeek(dir) {
+  weekOffset += dir;
+  renderWeek();
+}
+
+function renderWeek() {
+  const dates = getWeekDates();
+  const today = dateStr(new Date());
+
+  // Week label
+  const fmt = (d) => `${d.getMonth()+1}.${String(d.getDate()).padStart(2,'0')}`;
+  document.getElementById('week-label').textContent =
+    `${dates[0].getFullYear()} · ${fmt(dates[0])} – ${fmt(dates[6])}`;
+
+  const container = document.getElementById('days-container');
+  container.innerHTML = '';
+
+  dates.forEach((date, idx) => {
+    const ds = dateStr(date);
+    const isToday = ds === today;
+    const dayMenuItems = menuData.filter(m => m.date === ds);
+
+    const card = document.createElement('div');
+    card.className = 'day-card';
+
+    const header = document.createElement('div');
+    header.className = 'day-header';
+    header.innerHTML = `
+      <span class="day-name">${DAY_NAMES_FULL[idx]}</span>
+      ${isToday ? '<span class="day-today">Ma</span>' : ''}
+      <span class="day-date">${fmt(date)}</span>
+    `;
+    card.appendChild(header);
+
+    const mealsDiv = document.createElement('div');
+    mealsDiv.className = 'day-meals';
+
+    MEALS.forEach(({ key, label, icon }) => {
+      const entry = dayMenuItems.find(m => m.meal === key);
+      const row = document.createElement('div');
+      row.className = 'meal-row';
+      row.onclick = () => openMealModal(ds, key, entry);
+
+      const recipe = entry?.recipeId ? recipes.find(r => r.id === entry.recipeId) : null;
+
+      row.innerHTML = `
+        <span class="meal-icon">${icon}</span>
+        <span class="meal-label">${label}</span>
+        <span class="meal-dish ${entry ? '' : 'meal-empty'}">${entry ? entry.dish : '+ hozzáad'}</span>
+        ${recipe ? '<span class="meal-recipe-badge">Recept</span>' : ''}
+        ${entry ? '<span class="meal-edit-icon">✏️</span>' : ''}
+      `;
+      mealsDiv.appendChild(row);
+    });
+
+    card.appendChild(mealsDiv);
+    container.appendChild(card);
+  });
+}
+
+// ============================================================
+// MEAL MODAL
+// ============================================================
+function openMealModal(date, meal, existing) {
+  editingDate = date;
+  editingMeal = meal;
+  const mealInfo = MEALS.find(m => m.key === meal);
+  const d = new Date(date + 'T12:00:00');
+
+  document.getElementById('meal-modal-title').textContent =
+    mealInfo.icon + ' ' + mealInfo.label + ' – ' + DAY_NAMES_FULL[d.getDay()-1 < 0 ? 6 : d.getDay()-1];
+  document.getElementById('meal-modal-context').textContent =
+    date.replace(/-/g, '. ');
+
+  // Prefill
+  document.getElementById('meal-dish-input').value = existing?.dish || '';
+  currentServings = existing?.servings || DEFAULT_SERVINGS;
+  document.getElementById('servings-val').textContent = currentServings;
+  document.getElementById('servings-display').textContent = currentServings;
+
+  // Recipe chips
+  const chipsContainer = document.getElementById('recipe-chips');
+  chipsContainer.innerHTML = '';
+  if (recipes.length === 0) {
+    chipsContainer.innerHTML = '<span style="color:var(--text3);font-size:13px">Még nincs mentett recept</span>';
+  } else {
+    recipes.forEach(r => {
+      const chip = document.createElement('div');
+      chip.className = 'recipe-chip' + (existing?.recipeId === r.id ? ' selected' : '');
+      chip.textContent = r.name;
+      chip.onclick = () => selectRecipeChip(r.id, r.name, chip);
+      chipsContainer.appendChild(chip);
+    });
+  }
+
+  // Selected recipe ingredients
+  editingRecipeId = existing?.recipeId || null;
+  const recipe = editingRecipeId ? recipes.find(r => r.id === editingRecipeId) : null;
+  renderIngredientList('ingredient-list', recipe?.ingredients || [], currentServings, recipe?.servings || DEFAULT_SERVINGS);
+
+  document.getElementById('delete-meal-btn').style.display = existing ? 'block' : 'none';
+  document.getElementById('meal-modal').classList.add('open');
+}
+
+function selectRecipeChip(recipeId, recipeName, chipEl) {
+  document.querySelectorAll('.recipe-chip').forEach(c => c.classList.remove('selected'));
+  if (editingRecipeId === recipeId) {
+    editingRecipeId = null;
+    renderIngredientList('ingredient-list', [], currentServings, DEFAULT_SERVINGS);
+    return;
+  }
+  chipEl.classList.add('selected');
+  editingRecipeId = recipeId;
+  document.getElementById('meal-dish-input').value = recipeName;
+  const recipe = recipes.find(r => r.id === recipeId);
+  if (recipe) {
+    currentServings = recipe.servings;
+    document.getElementById('servings-val').textContent = currentServings;
+    document.getElementById('servings-display').textContent = currentServings;
+    renderIngredientList('ingredient-list', recipe.ingredients, currentServings, recipe.servings);
+  }
+}
+
+function closeMealModal(e) {
+  if (e && e.target !== document.getElementById('meal-modal')) return;
+  document.getElementById('meal-modal').classList.remove('open');
+}
+
+function changeServings(delta) {
+  currentServings = Math.max(1, currentServings + delta);
+  document.getElementById('servings-val').textContent = currentServings;
+  document.getElementById('servings-display').textContent = currentServings;
+  if (editingRecipeId) {
+    const recipe = recipes.find(r => r.id === editingRecipeId);
+    if (recipe) renderIngredientList('ingredient-list', recipe.ingredients, currentServings, recipe.servings);
+  }
+}
+
+function renderIngredientList(containerId, ingredients, forServings, baseServings) {
+  const container = document.getElementById(containerId);
+  container.innerHTML = '';
+  ingredients.forEach((ing, i) => {
+    addIngredientRow(containerId, ing, forServings, baseServings);
+  });
+}
+
+function addIngredientRow(containerId = 'ingredient-list', ing = null, forServings = null, baseServings = null) {
+  const container = document.getElementById(containerId);
+  const row = document.createElement('div');
+  row.className = 'ingredient-row';
+
+  const scale = (forServings && baseServings && baseServings > 0) ? forServings / baseServings : 1;
+  const scaledAmt = ing?.amount ? Math.round(parseFloat(ing.amount) * scale * 100) / 100 : '';
+
+  row.innerHTML = `
+    <input class="ing-name" type="text" placeholder="Hozzávaló" value="${ing?.name || ''}">
+    <input class="ing-amount" type="number" placeholder="Mennyi" value="${scaledAmt || ing?.amount || ''}">
+    <input class="ing-unit" type="text" placeholder="egység" value="${ing?.unit || ''}">
+    <button class="del-btn" onclick="this.parentElement.remove()">×</button>
+  `;
+  container.appendChild(row);
+}
+
+function getIngredients(containerId) {
+  const rows = document.querySelectorAll('#' + containerId + ' .ingredient-row');
+  return Array.from(rows).map(r => ({
+    name: r.querySelector('.ing-name').value.trim(),
+    amount: r.querySelector('.ing-amount').value.trim(),
+    unit: r.querySelector('.ing-unit').value.trim()
+  })).filter(i => i.name);
+}
+
+async function saveMeal() {
+  const dish = document.getElementById('meal-dish-input').value.trim();
+  if (!dish) { toast('Add meg az étel nevét!'); return; }
+
+  // Ha van hozzávaló és nincs recept mentve, felajánljuk receptként való mentést
+  const ings = getIngredients('ingredient-list');
+
+  try {
+    await api('setMeal', {
+      date: editingDate,
+      meal: editingMeal,
+      dish,
+      recipeId: editingRecipeId || '',
+      servings: currentServings
+    });
+
+    // Ha vannak hozzávalók és nincs kijelölt recept, mentsük el új receptként
+    if (ings.length > 0 && !editingRecipeId) {
+      const result = await api('saveRecipe', {
+        name: dish,
+        servings: currentServings,
+        ingredients: JSON.stringify(ings.map(i => ({ name: i.name, amount: i.amount, unit: i.unit })))
+      });
+      editingRecipeId = result.id;
+      await api('setMeal', { date: editingDate, meal: editingMeal, dish, recipeId: result.id, servings: currentServings });
+    }
+
+    await fetchAll();
+    document.getElementById('meal-modal').classList.remove('open');
+    toast('Mentve! ✓');
+  } catch(e) {
+    toast('Hiba: ' + e.message);
+  }
+}
+
+async function deleteMeal() {
+  try {
+    await api('deleteMeal', { date: editingDate, meal: editingMeal });
+    await fetchAll();
+    document.getElementById('meal-modal').classList.remove('open');
+    toast('Törölve');
+  } catch(e) { toast('Hiba: ' + e.message); }
+}
+
+async function addMealToShopping() {
+  const ings = getIngredients('ingredient-list');
+  if (ings.length === 0) { toast('Nincs hozzávaló a listán'); return; }
+  try {
+    await api('addShoppingItems', {
+      items: JSON.stringify(ings.map(i => ({ ingredient: i.name, amount: i.amount, unit: i.unit })))
+    });
+    await fetchAll();
+    toast('Hozzáadva a bevásárlólistához! 🛒');
+  } catch(e) { toast('Hiba: ' + e.message); }
+}
+
+function openNosalty() {
+  const dish = document.getElementById('meal-dish-input').value.trim() || editingMeal;
+  const url = `https://www.nosalty.hu/recept?q=${encodeURIComponent(dish)}`;
+  window.open(url, '_blank');
+}
+
+// ============================================================
+// SHOPPING VIEW
+// ============================================================
+function renderShopping() {
+  const container = document.getElementById('shopping-container');
+  const unchecked = shopping.filter(i => !i.checked);
+  const checked = shopping.filter(i => i.checked);
+
+  if (shopping.length === 0) {
+    container.innerHTML = `
+      <div class="empty-state">
+        <div class="emoji">🛒</div>
+        <p>A bevásárlólista üres.<br>Adj hozzá ételt a menüből,<br>vagy vegyél fel terméket kézzel.</p>
+      </div>`;
+    return;
+  }
+
+  container.innerHTML = '';
+
+  if (unchecked.length > 0) {
+    const t = document.createElement('div');
+    t.className = 'shop-section-title';
+    t.textContent = 'Megvásárlandó';
+    container.appendChild(t);
+    unchecked.forEach(item => container.appendChild(createShopItem(item)));
+  }
+
+  if (checked.length > 0) {
+    const t = document.createElement('div');
+    t.className = 'shop-section-title';
+    t.textContent = 'Megvásárolva';
+    container.appendChild(t);
+    checked.forEach(item => container.appendChild(createShopItem(item)));
+  }
+}
+
+function createShopItem(item) {
+  const el = document.createElement('div');
+  el.className = 'shop-item' + (item.checked ? ' checked' : '');
+  el.onclick = () => toggleShopItem(item.id);
+  const amtStr = [item.amount, item.unit].filter(Boolean).join(' ');
+  el.innerHTML = `
+    <div class="shop-checkbox">${item.checked ? '✓' : ''}</div>
+    <span class="shop-name">${item.ingredient}</span>
+    ${amtStr ? `<span class="shop-amount">${amtStr}</span>` : ''}
+  `;
+  return el;
+}
+
+async function toggleShopItem(id) {
+  try {
+    await api('toggleShoppingItem', { id });
+    const item = shopping.find(i => i.id === id);
+    if (item) item.checked = !item.checked;
+    renderShopping();
+    updateShoppingCount();
+  } catch(e) { toast('Hiba: ' + e.message); }
+}
+
+async function clearChecked() {
+  if (!shopping.some(i => i.checked)) { toast('Nincs kész elem'); return; }
+  try {
+    await api('clearChecked');
+    shopping = shopping.filter(i => !i.checked);
+    renderShopping();
+    updateShoppingCount();
+    toast('Kész elemek törölve');
+  } catch(e) { toast('Hiba: ' + e.message); }
+}
+
+async function clearAll() {
+  if (!confirm('Biztosan törlöd az egész bevásárlólistát?')) return;
+  try {
+    await api('clearAll');
+    shopping = [];
+    renderShopping();
+    updateShoppingCount();
+    toast('Lista törölve');
+  } catch(e) { toast('Hiba: ' + e.message); }
+}
+
+function updateShoppingCount() {
+  const unchecked = shopping.filter(i => !i.checked).length;
+  const badge = document.getElementById('shopping-count');
+  if (unchecked > 0) {
+    badge.textContent = unchecked;
+    badge.style.display = 'inline-block';
+  } else {
+    badge.style.display = 'none';
+  }
+}
+
+// ============================================================
+// RECIPES VIEW
+// ============================================================
+function renderRecipes() {
+  const container = document.getElementById('recipes-container');
+  if (recipes.length === 0) {
+    container.innerHTML = `
+      <div class="empty-state">
+        <div class="emoji">📖</div>
+        <p>Még nincs mentett recept.<br>Az ételfelvitelnél automatikusan<br>mentjük a hozzávalókat.</p>
+      </div>`;
+    return;
+  }
+  container.innerHTML = '';
+  recipes.forEach(r => {
+    const card = document.createElement('div');
+    card.className = 'recipe-card';
+    card.onclick = () => openRecipeModal(r);
+    const ingPreview = r.ingredients.slice(0, 4).map(i => i.name).join(', ') + (r.ingredients.length > 4 ? '...' : '');
+    card.innerHTML = `
+      <div class="recipe-card-name">${r.name}</div>
+      <div class="recipe-card-meta">${r.servings} személyre · ${r.ingredients.length} hozzávaló</div>
+      ${ingPreview ? `<div class="recipe-card-ings">${ingPreview}</div>` : ''}
+    `;
+    container.appendChild(card);
+  });
+}
+
+function openNewRecipe() {
+  openRecipeModal(null);
+}
+
+function openRecipeModal(recipe) {
+  editingRecipeId = recipe?.id || null;
+  document.getElementById('recipe-modal-title').textContent = recipe ? 'Recept szerkesztése' : 'Új recept';
+  document.getElementById('recipe-name-input').value = recipe?.name || '';
+  currentRecipeServings = recipe?.servings || DEFAULT_SERVINGS;
+  document.getElementById('recipe-servings-val').textContent = currentRecipeServings;
+  document.getElementById('recipe-servings-display').textContent = currentRecipeServings;
+  renderIngredientList('recipe-ingredient-list', recipe?.ingredients || [], currentRecipeServings, recipe?.servings || DEFAULT_SERVINGS);
+  document.getElementById('delete-recipe-btn').style.display = recipe ? 'block' : 'none';
+  document.getElementById('recipe-modal').classList.add('open');
+}
+
+function closeRecipeModal(e) {
+  if (e && e.target !== document.getElementById('recipe-modal')) return;
+  document.getElementById('recipe-modal').classList.remove('open');
+}
+
+function changeRecipeServings(delta) {
+  currentRecipeServings = Math.max(1, currentRecipeServings + delta);
+  document.getElementById('recipe-servings-val').textContent = currentRecipeServings;
+  document.getElementById('recipe-servings-display').textContent = currentRecipeServings;
+}
+
+function addRecipeIngredientRow() {
+  addIngredientRow('recipe-ingredient-list');
+}
+
+async function saveRecipe() {
+  const name = document.getElementById('recipe-name-input').value.trim();
+  if (!name) { toast('Add meg a recept nevét!'); return; }
+  const ings = getIngredients('recipe-ingredient-list');
+  try {
+    await api('saveRecipe', {
+      id: editingRecipeId || '',
+      name,
+      servings: currentRecipeServings,
+      ingredients: JSON.stringify(ings)
+    });
+    await fetchAll();
+    document.getElementById('recipe-modal').classList.remove('open');
+    toast('Recept mentve! ✓');
+  } catch(e) { toast('Hiba: ' + e.message); }
+}
+
+async function deleteRecipe() {
+  if (!confirm('Biztosan törlöd ezt a receptet?')) return;
+  try {
+    await api('deleteRecipe', { id: editingRecipeId });
+    await fetchAll();
+    document.getElementById('recipe-modal').classList.remove('open');
+    toast('Recept törölve');
+  } catch(e) { toast('Hiba: ' + e.message); }
+}
+
+// ============================================================
+// UTILS
+// ============================================================
+function switchTab(tab) {
+  document.querySelectorAll('.tab-btn').forEach((b, i) => {
+    b.classList.toggle('active', ['menu','shopping','recipes'][i] === tab);
+  });
+  document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
+  document.getElementById('view-' + tab).classList.add('active');
+}
+
+let toastTimer;
+function toast(msg) {
+  const el = document.getElementById('toast');
+  el.textContent = msg;
+  el.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => el.classList.remove('show'), 2500);
+}
+</script>
+</body>
+</html>

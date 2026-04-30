@@ -415,6 +415,15 @@
     <div class="modal-handle"></div>
     <div class="modal-title" id="recipe-modal-title">Recept</div>
     <div class="modal-section">
+      <label class="modal-label">🔗 Importálás Mindmegette URL-ből</label>
+      <div style="display:flex;gap:8px;">
+        <input class="modal-input" type="url" id="import-url-input" placeholder="https://www.mindmegette.hu/recept/..." style="flex:1;margin:0;">
+        <button class="btn-sm primary" id="import-btn" onclick="importFromUrl()" style="white-space:nowrap;flex-shrink:0;">Importál</button>
+      </div>
+      <div id="import-status" style="font-size:12px;color:var(--text3);margin-top:5px;min-height:16px;"></div>
+    </div>
+    <div class="modal-divider"></div>
+    <div class="modal-section">
       <label class="modal-label">Recept neve</label>
       <input class="modal-input" type="text" id="recipe-name-input" placeholder="pl. Paprikás krumpli">
     </div>
@@ -500,7 +509,7 @@
 // ============================================================
 // STATE
 // ============================================================
-const HARDCODED_API_URL = 'https://script.google.com/macros/s/AKfycbxUi66KjbYM9ZvtL5lSKgB7fCqidQ5Vs752DA5a-ow3z_lRpJWI-HGEENoWzodGSi2GBg/exec';
+const HARDCODED_API_URL = 'https://script.google.com/macros/s/AKfycbzzcZii14-OBMIB_tSrN07xtSwvblmnHr8O1vy2rSJX-YRYrH7BUJyka7TwVh0Jy9LRCw/exec';
 let API_URL = HARDCODED_API_URL || localStorage.getItem('csaladiMenuApi') || '';
 let DEFAULT_SERVINGS = parseInt(localStorage.getItem('csaladiMenuServings') || '4');
 let weekOffset = 0; // current week offset from today
@@ -1165,7 +1174,7 @@ async function addMealToShopping() {
 function openNosalty(recipeName) {
   const dish = recipeName || document.getElementById('meal-dish-input').value.trim();
   if (!dish) { toast('Add meg az étel nevét először!'); return; }
-  const url = `https://www.mindmegette.hu/kereses/?q=${encodeURIComponent(dish)}`;
+  const url = `https://www.mindmegette.hu/kereses?global_filter=${encodeURIComponent(dish)}&content_types%5B%5D=recipe`;
   window.open(url, '_blank');
 }
 
@@ -1351,8 +1360,80 @@ async function deleteRecipe() {
 }
 
 // ============================================================
-// ASSIGN RECIPE TO DAY
+// MINDMEGETTE URL IMPORT
 // ============================================================
+async function importFromUrl() {
+  const url = document.getElementById('import-url-input').value.trim();
+  if (!url || !url.includes('mindmegette.hu')) {
+    document.getElementById('import-status').textContent = 'Adj meg egy mindmegette.hu recept URL-t!';
+    return;
+  }
+
+  const btn = document.getElementById('import-btn');
+  const status = document.getElementById('import-status');
+  btn.disabled = true;
+  btn.textContent = '⏳';
+  status.textContent = 'Letöltés...';
+
+  try {
+    // Az Apps Script-en keresztül kérjük le az oldalt (elkerüli a CORS-t)
+    const pageData = await api('fetchUrl', { url });
+    if (!pageData?.html) throw new Error('Nem sikerült letölteni az oldalt');
+
+    status.textContent = 'Elemzés...';
+
+    // Claude API-val parse-oljuk a hozzávalókat
+    const response = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        model: 'claude-sonnet-4-20250514',
+        max_tokens: 1000,
+        messages: [{
+          role: 'user',
+          content: `Az alábbi HTML egy magyar recept oldal tartalma. Kérlek add vissza CSAK a következő JSON formátumban a recept adatait, semmi más szöveg ne legyen a válaszban:
+{"name":"recept neve","servings":4,"ingredients":[{"name":"hozzávaló neve","amount":"mennyiség számként","unit":"mértékegység"}]}
+
+A mennyiségnél csak számot adj (pl. "45" nem "45 dkg"), a mértékegységnél a rövidítést (dkg, g, kg, dl, l, db, ek, tk, csipet, stb.).
+Ha nincs mennyiség, az amount legyen "".
+
+HTML tartalom:
+${pageData.html.substring(0, 8000)}`
+        }]
+      })
+    });
+
+    const data = await response.json();
+    const text = data.content?.[0]?.text || '';
+    const clean = text.replace(/```json|```/g, '').trim();
+    const parsed = JSON.parse(clean);
+
+    // Kitöltjük a form mezőket
+    document.getElementById('recipe-name-input').value = parsed.name || '';
+    currentRecipeServings = parsed.servings || 4;
+    document.getElementById('recipe-servings-val').textContent = currentRecipeServings;
+    document.getElementById('recipe-servings-display').textContent = currentRecipeServings;
+
+    const container = document.getElementById('recipe-ingredient-list');
+    container.innerHTML = '';
+    (parsed.ingredients || []).forEach(ing => {
+      addIngredientRow('recipe-ingredient-list', { name: ing.name, amount: ing.amount, unit: ing.unit });
+    });
+
+    document.getElementById('import-url-input').value = '';
+    status.style.color = 'var(--green)';
+    status.textContent = `✓ Importálva: ${parsed.ingredients?.length || 0} hozzávaló`;
+
+  } catch(e) {
+    status.style.color = 'var(--red)';
+    status.textContent = 'Hiba: ' + e.message;
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Importál';
+  }
+}
+
+
 let assignRecipeId = null;
 let assignServings = 4;
 let assignMeal = 'ebéd';

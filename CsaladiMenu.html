@@ -1080,28 +1080,35 @@ function initDragDrop() {
 
 async function dropEntry(targetDate, targetMeal) {
   if (!dragEntryId) return;
-  if (dragSourceDate === targetDate && dragSourceMeal === targetMeal) return;
+  if (dragSourceDate === targetDate && dragSourceMeal === targetMeal) { dragEntryId = null; return; }
 
   const entry = menuData.find(m => m.id === dragEntryId);
-  if (!entry) return;
+  if (!entry) { dragEntryId = null; return; }
 
-  // Ellenőrzés: max 3 étel per étkezés
+  // Max 3 étel per étkezés
   const targetCount = menuData.filter(m =>
     String(m.date).substring(0,10) === targetDate && m.meal === targetMeal
   ).length;
-  if (targetCount >= 3) { toast('Max. 3 étel per étkezés!'); return; }
+  if (targetCount >= 3) { toast('Max. 3 étel per étkezés!'); dragEntryId = null; return; }
 
   try {
+    // 1. Töröljük a régi helyen
+    await api('deleteMeal', {
+      entryId: dragEntryId,
+      date: entry.date,
+      meal: entry.meal
+    });
+    // 2. Létrehozzuk az új helyen (entryId nélkül = új sor)
     await api('setMeal', {
       date: targetDate,
       meal: targetMeal,
       dish: entry.dish,
       recipeId: entry.recipeId || '',
       servings: entry.servings,
-      entryId: dragEntryId
+      entryId: ''
     });
     await fetchAll();
-    toast(`Áthelyezve ✓`);
+    toast('Áthelyezve ✓');
   } catch(e) { toast('Hiba: ' + e.message); }
 
   dragEntryId = null;

@@ -882,40 +882,69 @@ async function saveMeal() {
   const ings = getIngredients('ingredient-list');
   const addToShopping = document.getElementById('add-to-shopping-check').checked;
 
+  // Optimistic update — azonnal frissítjük a lokális adatot
+  const tempId = editingEntryId || 'tmp_' + Date.now();
+  const existing = menuData.findIndex(m => m.id === editingEntryId);
+  const newEntry = {
+    id: tempId, date: editingDate, meal: editingMeal,
+    dish, recipeId: editingRecipeId || '', servings: currentServings
+  };
+  if (existing >= 0) menuData[existing] = newEntry;
+  else menuData.push(newEntry);
+
+  if (addToShopping && ings.length > 0) {
+    ings.forEach(i => {
+      const existing = shopping.find(s => s.ingredient.toLowerCase() === i.name.toLowerCase() && !s.checked);
+      if (existing) existing.amount = (parseFloat(existing.amount)||0) + (parseFloat(i.amount)||0);
+      else shopping.push({ id: 'tmp_'+Date.now(), ingredient: i.name, amount: i.amount, unit: i.unit, checked: false });
+    });
+    renderShopping();
+    updateShoppingCount();
+  }
+
+  document.getElementById('meal-modal').classList.remove('open');
+  renderWeek();
+  toast(addToShopping && ings.length > 0 ? 'Mentve + bevásárlólistához adva! ✓' : 'Mentve! ✓');
+
+  // Háttérben szinkronizálunk
   try {
     const result = await api('setMeal', {
-      date: editingDate,
-      meal: editingMeal,
-      dish,
-      recipeId: editingRecipeId || '',
-      servings: currentServings,
+      date: editingDate, meal: editingMeal, dish,
+      recipeId: editingRecipeId || '', servings: currentServings,
       entryId: editingEntryId || ''
     });
 
+    // Valódi ID visszaírása
+    const idx = menuData.findIndex(m => m.id === tempId);
+    if (idx >= 0 && result.entryId) menuData[idx].id = result.entryId;
+
     if (ings.length > 0 && !editingRecipeId) {
       const recResult = await api('saveRecipe', {
-        name: dish,
-        servings: currentServings,
+        name: dish, servings: currentServings,
         ingredients: JSON.stringify(ings.map(i => ({ name: i.name, amount: i.amount, unit: i.unit })))
       });
-      await api('setMeal', {
-        date: editingDate, meal: editingMeal, dish,
-        recipeId: recResult.id, servings: currentServings,
-        entryId: result.entryId || editingEntryId || ''
-      });
+      if (result.entryId) {
+        await api('setMeal', {
+          date: editingDate, meal: editingMeal, dish,
+          recipeId: recResult.id, servings: currentServings,
+          entryId: result.entryId
+        });
+        const idx2 = menuData.findIndex(m => m.id === (result.entryId || tempId));
+        if (idx2 >= 0) menuData[idx2].recipeId = recResult.id;
+      }
+      // Receptek frissítése háttérben
+      api('getRecipes').then(r => { recipes = r; renderRecipes(); }).catch(() => {});
     }
 
     if (addToShopping && ings.length > 0) {
-      await api('addShoppingItems', {
+      api('addShoppingItems', {
         items: JSON.stringify(ings.map(i => ({ ingredient: i.name, amount: i.amount, unit: i.unit })))
-      });
+      }).then(() => api('getShopping')).then(s => { shopping = s; renderShopping(); updateShoppingCount(); }).catch(() => {});
     }
-
-    await fetchAll();
-    document.getElementById('meal-modal').classList.remove('open');
-    toast(addToShopping && ings.length > 0 ? 'Mentve + bevásárlólistához adva! ✓' : 'Mentve! ✓');
   } catch(e) {
-    toast('Hiba: ' + e.message);
+    // Szinkron hiba esetén teljes újratöltés
+    fetchAll();
+    toast('Szinkron hiba, újratöltve');
   }
 }
 
@@ -955,6 +984,14 @@ function closeDeleteConfirm(e) {
 async function confirmDeleteMeal() {
   if (!deletingEntry?.id && !deletingEntry?.date) return;
   const alsoShopping = document.getElementById('delete-from-shopping-check').checked;
+
+  // Optimistic update
+  menuData = menuData.filter(m => m.id !== deletingEntry.id);
+  renderWeek();
+  document.getElementById('delete-confirm-modal').classList.remove('open');
+  toast(alsoShopping ? 'Törölve + bevásárlólistáról is! ✓' : 'Törölve ✓');
+
+  // Háttérben szinkronizálunk
   try {
     await api('deleteMeal', {
       entryId: deletingEntry.id || '',
@@ -963,28 +1000,23 @@ async function confirmDeleteMeal() {
     });
 
     if (alsoShopping) {
-      // Megkeressük a bevásárlólistán az étel hozzávalóit név alapján
-      // és töröljük a ki nem pipált elemeket
-      const entry = menuData.find(m => m.id === deletingEntry.id);
-      if (entry?.recipeId) {
-        const recipe = recipes.find(r => r.id === entry.recipeId);
-        if (recipe) {
-          const ingNames = recipe.ingredients.map(i => i.name.toLowerCase());
-          const toDelete = shopping.filter(s =>
-            !s.checked && ingNames.includes(s.ingredient.toLowerCase())
-          );
-          for (const s of toDelete) {
-            await api('toggleShoppingItem', { id: s.id });
-            await api('clearChecked');
-          }
+      const entry = { ...deletingEntry };
+      const recipe = entry.recipeId ? recipes.find(r => r.id === entry.recipeId) : null;
+      if (recipe) {
+        const ingNames = recipe.ingredients.map(i => i.name.toLowerCase());
+        const toDelete = shopping.filter(s => !s.checked && ingNames.includes(s.ingredient.toLowerCase()));
+        shopping = shopping.filter(s => !toDelete.find(d => d.id === s.id));
+        renderShopping(); updateShoppingCount();
+        for (const s of toDelete) {
+          await api('toggleShoppingItem', { id: s.id });
         }
+        await api('clearChecked');
       }
     }
-
-    await fetchAll();
-    document.getElementById('delete-confirm-modal').classList.remove('open');
-    toast(alsoShopping ? 'Törölve + bevásárlólistáról is! ✓' : 'Törölve ✓');
-  } catch(e) { toast('Hiba: ' + e.message); }
+  } catch(e) {
+    fetchAll();
+    toast('Szinkron hiba, újratöltve');
+  }
 }
 
 // ============================================================
@@ -1085,33 +1117,37 @@ async function dropEntry(targetDate, targetMeal) {
   const entry = menuData.find(m => m.id === dragEntryId);
   if (!entry) { dragEntryId = null; return; }
 
-  // Max 3 étel per étkezés
   const targetCount = menuData.filter(m =>
     String(m.date).substring(0,10) === targetDate && m.meal === targetMeal
   ).length;
   if (targetCount >= 3) { toast('Max. 3 étel per étkezés!'); dragEntryId = null; return; }
 
-  try {
-    // 1. Töröljük a régi helyen
-    await api('deleteMeal', {
-      entryId: dragEntryId,
-      date: entry.date,
-      meal: entry.meal
-    });
-    // 2. Létrehozzuk az új helyen (entryId nélkül = új sor)
-    await api('setMeal', {
-      date: targetDate,
-      meal: targetMeal,
-      dish: entry.dish,
-      recipeId: entry.recipeId || '',
-      servings: entry.servings,
-      entryId: ''
-    });
-    await fetchAll();
-    toast('Áthelyezve ✓');
-  } catch(e) { toast('Hiba: ' + e.message); }
+  // Optimistic update
+  const idx = menuData.findIndex(m => m.id === dragEntryId);
+  if (idx >= 0) { menuData[idx].date = targetDate; menuData[idx].meal = targetMeal; }
+  renderWeek();
+  toast('Áthelyezve ✓');
 
+  const savedId = dragEntryId;
+  const savedEntry = { ...entry };
   dragEntryId = null;
+
+  // Háttérben szinkronizálunk
+  try {
+    await api('deleteMeal', { entryId: savedId, date: savedEntry.date, meal: savedEntry.meal });
+    await api('setMeal', {
+      date: targetDate, meal: targetMeal,
+      dish: savedEntry.dish, recipeId: savedEntry.recipeId || '',
+      servings: savedEntry.servings, entryId: ''
+    });
+    // Valódi ID lekérése
+    const fresh = await api('getMenu');
+    menuData = fresh;
+    renderWeek();
+  } catch(e) {
+    fetchAll();
+    toast('Szinkron hiba, újratöltve');
+  }
 }
 
 async function addMealToShopping() {

@@ -159,6 +159,22 @@
   .meal-row-add .meal-empty { color: var(--text3); font-size: 13px; }
   .meal-dish-bullet { color: var(--text3); font-size: 16px; flex-shrink: 0; }
   .meal-add-icon { color: var(--accent); font-size: 16px; font-weight: 600; flex-shrink: 0; width: 16px; text-align: center; }
+
+  /* drag handle */
+  .drag-handle {
+    color: var(--text3); font-size: 15px; flex-shrink: 0;
+    cursor: grab; padding: 0 2px; touch-action: none; user-select: none;
+  }
+  .drag-handle:active { cursor: grabbing; }
+  .meal-row-dish { touch-action: none; }
+  .meal-row-dish.dragging { opacity: 0.4; background: var(--surface2); }
+  .drop-zone {
+    height: 3px; margin: 1px 14px 1px 34px; border-radius: 2px;
+    background: transparent; transition: background 0.15s, height 0.15s;
+  }
+  .drop-zone.drag-over { height: 28px; background: var(--accent-bg); border: 1.5px dashed var(--accent); border-radius: 6px; }
+  .meal-slot-drop-target { outline: none; }
+  .meal-slot-drop-target.drag-over-slot { background: var(--accent-bg); border-radius: 6px; }
   .meal-recipe-badge {
     font-size: 10px; padding: 2px 6px; border-radius: 5px;
     background: var(--green-bg); color: var(--green); font-weight: 500;
@@ -387,7 +403,7 @@
         <span style="font-size:14px;color:var(--text2);">Hozzáadás a bevásárlólistához is</span>
       </label>
       <button class="btn-full primary" onclick="saveMeal()">💾 Mentés</button>
-      <button class="btn-full danger" id="delete-meal-btn" onclick="deleteMeal()" style="display:none">Törlés</button>
+      <button class="btn-full danger" id="delete-meal-btn" onclick="openDeleteConfirm()" style="display:none">🗑️ Törlés</button>
       <button class="btn-full secondary" onclick="closeMealModal()">Mégse</button>
     </div>
   </div>
@@ -420,6 +436,25 @@
       <button class="btn-full primary" onclick="saveRecipe()">💾 Recept mentése</button>
       <button class="btn-full danger" id="delete-recipe-btn" onclick="deleteRecipe()" style="display:none">Recept törlése</button>
       <button class="btn-full secondary" onclick="closeRecipeModal()">Mégse</button>
+    </div>
+  </div>
+</div>
+
+<!-- DELETE CONFIRM MODAL -->
+<div class="modal-overlay" id="delete-confirm-modal" onclick="closeDeleteConfirm(event)">
+  <div class="modal">
+    <div class="modal-handle"></div>
+    <div class="modal-title">Törlés megerősítése</div>
+    <div class="modal-context" id="delete-confirm-dish"></div>
+    <div class="modal-section">
+      <label style="display:flex;align-items:center;gap:10px;padding:6px 0;cursor:pointer;">
+        <input type="checkbox" id="delete-from-shopping-check" style="width:20px;height:20px;accent-color:var(--red);cursor:pointer;">
+        <span style="font-size:14px;color:var(--text2);">Bevásárlólistáról is töröljön (ha szerepel rajta)</span>
+      </label>
+    </div>
+    <div class="modal-actions">
+      <button class="btn-full danger" onclick="confirmDeleteMeal()">🗑️ Igen, törlöm</button>
+      <button class="btn-full secondary" onclick="closeDeleteConfirm()">Mégse</button>
     </div>
   </div>
 </div>
@@ -465,7 +500,7 @@
 // ============================================================
 // STATE
 // ============================================================
-const HARDCODED_API_URL = 'https://script.google.com/macros/s/AKfycbwmki19ieJFM_pEj6CNsqro0Kv9-SNXGsctUS2Q2ytxy6GocQ1vd2zoDvxZt1xQwh2QQg/exec';
+const HARDCODED_API_URL = 'https://script.google.com/macros/s/AKfycbzZzPd3oYxR2pZcwcg3qY4n0pe-5-i9LxMHoU8kq8ldG7H_qEy0VoW4jhnHSJ37dVK17Q/exec';
 let API_URL = HARDCODED_API_URL || localStorage.getItem('csaladiMenuApi') || '';
 let DEFAULT_SERVINGS = parseInt(localStorage.getItem('csaladiMenuServings') || '4');
 let weekOffset = 0; // current week offset from today
@@ -627,6 +662,7 @@ function renderWeek() {
 
     const card = document.createElement('div');
     card.className = 'day-card';
+    card.dataset.date = ds;
 
     const header = document.createElement('div');
     header.className = 'day-header';
@@ -640,31 +676,53 @@ function renderWeek() {
     mealsDiv.className = 'day-meals';
 
     MEALS.forEach(({ key, label, icon }) => {
-      // Összes étel ennél az étkezésnél
       const entries = dayMenuItems.filter(m => m.meal === key);
 
-      // Étkezés fejléc sor
       const mealHeader = document.createElement('div');
-      mealHeader.className = 'meal-type-header';
+      mealHeader.className = 'meal-type-header meal-slot-drop-target';
+      mealHeader.dataset.date = ds;
+      mealHeader.dataset.meal = key;
       mealHeader.innerHTML = `<span class="meal-icon">${icon}</span><span class="meal-label">${label}</span>`;
       mealsDiv.appendChild(mealHeader);
 
-      // Meglévő ételek
       entries.forEach(entry => {
+        // drop zone előtte
+        const dz = document.createElement('div');
+        dz.className = 'drop-zone';
+        dz.dataset.date = ds;
+        dz.dataset.meal = key;
+        mealsDiv.appendChild(dz);
+
         const row = document.createElement('div');
         row.className = 'meal-row meal-row-dish';
-        row.onclick = () => openMealModal(ds, key, entry);
+        row.draggable = true;
+        row.dataset.entryId = entry.id;
+        row.dataset.date = ds;
+        row.dataset.meal = key;
+        row.dataset.dish = entry.dish;
+
         const recipe = entry.recipeId ? recipes.find(r => r.id === entry.recipeId) : null;
         row.innerHTML = `
-          <span class="meal-dish-bullet">·</span>
+          <span class="drag-handle" title="Húzd át">⠿</span>
           <span class="meal-dish">${entry.dish}</span>
           ${recipe ? '<span class="meal-recipe-badge">R</span>' : ''}
-          <span class="meal-edit-icon">✏️</span>
+          <span class="meal-edit-icon" style="margin-left:auto">✏️</span>
         `;
+        row.querySelector('.meal-edit-icon').onclick = (e) => {
+          e.stopPropagation();
+          openMealModal(ds, key, entry);
+        };
+        row.querySelector('.drag-handle').addEventListener('mousedown', e => e.stopPropagation());
         mealsDiv.appendChild(row);
       });
 
-      // + hozzáad gomb (max 3 étel per étkezés)
+      // utolsó drop zone
+      const dzEnd = document.createElement('div');
+      dzEnd.className = 'drop-zone';
+      dzEnd.dataset.date = ds;
+      dzEnd.dataset.meal = key;
+      mealsDiv.appendChild(dzEnd);
+
       if (entries.length < 3) {
         const addRow = document.createElement('div');
         addRow.className = 'meal-row meal-row-add';
@@ -677,6 +735,8 @@ function renderWeek() {
     card.appendChild(mealsDiv);
     container.appendChild(card);
   });
+
+  initDragDrop();
 }
 
 // ============================================================
@@ -865,7 +925,176 @@ async function deleteMeal() {
   } catch(e) { toast('Hiba: ' + e.message); }
 }
 
-async function addMealToShopping() {
+// ============================================================
+// DELETE CONFIRM
+// ============================================================
+let deletingEntry = null;
+
+function openDeleteConfirm() {
+  deletingEntry = { id: editingEntryId, dish: document.getElementById('meal-dish-input').value };
+  document.getElementById('delete-confirm-dish').textContent = `"${deletingEntry.dish}"`;
+  document.getElementById('delete-from-shopping-check').checked = false;
+  document.getElementById('meal-modal').classList.remove('open');
+  document.getElementById('delete-confirm-modal').classList.add('open');
+}
+
+function closeDeleteConfirm(e) {
+  if (e && e.target !== document.getElementById('delete-confirm-modal')) return;
+  document.getElementById('delete-confirm-modal').classList.remove('open');
+}
+
+async function confirmDeleteMeal() {
+  if (!deletingEntry?.id) return;
+  const alsoShopping = document.getElementById('delete-from-shopping-check').checked;
+  try {
+    await api('deleteMeal', { entryId: deletingEntry.id });
+
+    if (alsoShopping) {
+      // Megkeressük a bevásárlólistán az étel hozzávalóit név alapján
+      // és töröljük a ki nem pipált elemeket
+      const entry = menuData.find(m => m.id === deletingEntry.id);
+      if (entry?.recipeId) {
+        const recipe = recipes.find(r => r.id === entry.recipeId);
+        if (recipe) {
+          const ingNames = recipe.ingredients.map(i => i.name.toLowerCase());
+          const toDelete = shopping.filter(s =>
+            !s.checked && ingNames.includes(s.ingredient.toLowerCase())
+          );
+          for (const s of toDelete) {
+            await api('toggleShoppingItem', { id: s.id });
+            await api('clearChecked');
+          }
+        }
+      }
+    }
+
+    await fetchAll();
+    document.getElementById('delete-confirm-modal').classList.remove('open');
+    toast(alsoShopping ? 'Törölve + bevásárlólistáról is! ✓' : 'Törölve ✓');
+  } catch(e) { toast('Hiba: ' + e.message); }
+}
+
+// ============================================================
+// DRAG & DROP (desktop + touch)
+// ============================================================
+let dragEntryId = null;
+let dragSourceDate = null;
+let dragSourceMeal = null;
+
+function initDragDrop() {
+  // Desktop drag events
+  document.querySelectorAll('.meal-row-dish[draggable]').forEach(row => {
+    row.addEventListener('dragstart', e => {
+      dragEntryId = row.dataset.entryId;
+      dragSourceDate = row.dataset.date;
+      dragSourceMeal = row.dataset.meal;
+      row.classList.add('dragging');
+      e.dataTransfer.effectAllowed = 'move';
+    });
+    row.addEventListener('dragend', () => {
+      row.classList.remove('dragging');
+      document.querySelectorAll('.drop-zone').forEach(z => z.classList.remove('drag-over'));
+    });
+  });
+
+  document.querySelectorAll('.drop-zone').forEach(zone => {
+    zone.addEventListener('dragover', e => {
+      e.preventDefault();
+      document.querySelectorAll('.drop-zone').forEach(z => z.classList.remove('drag-over'));
+      zone.classList.add('drag-over');
+    });
+    zone.addEventListener('dragleave', () => zone.classList.remove('drag-over'));
+    zone.addEventListener('drop', e => {
+      e.preventDefault();
+      zone.classList.remove('drag-over');
+      dropEntry(zone.dataset.date, zone.dataset.meal);
+    });
+  });
+
+  // Touch drag events
+  let touchDragEl = null;
+  let ghost = null;
+
+  document.querySelectorAll('.drag-handle').forEach(handle => {
+    handle.addEventListener('touchstart', e => {
+      const row = handle.closest('.meal-row-dish');
+      dragEntryId = row.dataset.entryId;
+      dragSourceDate = row.dataset.date;
+      dragSourceMeal = row.dataset.meal;
+      touchDragEl = row;
+
+      ghost = row.cloneNode(true);
+      ghost.style.cssText = `position:fixed;opacity:0.8;pointer-events:none;z-index:999;
+        width:${row.offsetWidth}px;background:var(--surface);border-radius:8px;
+        border:1px solid var(--accent);padding:6px 10px;font-size:14px;`;
+      document.body.appendChild(ghost);
+      row.classList.add('dragging');
+      e.preventDefault();
+    }, { passive: false });
+
+    handle.addEventListener('touchmove', e => {
+      if (!ghost) return;
+      const t = e.touches[0];
+      ghost.style.left = (t.clientX - 40) + 'px';
+      ghost.style.top = (t.clientY - 20) + 'px';
+
+      ghost.style.display = 'none';
+      const el = document.elementFromPoint(t.clientX, t.clientY);
+      ghost.style.display = '';
+
+      document.querySelectorAll('.drop-zone').forEach(z => z.classList.remove('drag-over'));
+      const zone = el?.closest('.drop-zone') || el?.classList.contains('drop-zone') && el;
+      if (zone) zone.classList.add('drag-over');
+
+      e.preventDefault();
+    }, { passive: false });
+
+    handle.addEventListener('touchend', e => {
+      if (!ghost) return;
+      ghost.remove(); ghost = null;
+      if (touchDragEl) touchDragEl.classList.remove('dragging');
+
+      const t = e.changedTouches[0];
+      const el = document.elementFromPoint(t.clientX, t.clientY);
+      const zone = el?.closest?.('.drop-zone');
+      if (zone) dropEntry(zone.dataset.date, zone.dataset.meal);
+
+      document.querySelectorAll('.drop-zone').forEach(z => z.classList.remove('drag-over'));
+      touchDragEl = null;
+    });
+  });
+}
+
+async function dropEntry(targetDate, targetMeal) {
+  if (!dragEntryId) return;
+  if (dragSourceDate === targetDate && dragSourceMeal === targetMeal) return;
+
+  const entry = menuData.find(m => m.id === dragEntryId);
+  if (!entry) return;
+
+  // Ellenőrzés: max 3 étel per étkezés
+  const targetCount = menuData.filter(m =>
+    String(m.date).substring(0,10) === targetDate && m.meal === targetMeal
+  ).length;
+  if (targetCount >= 3) { toast('Max. 3 étel per étkezés!'); return; }
+
+  try {
+    await api('setMeal', {
+      date: targetDate,
+      meal: targetMeal,
+      dish: entry.dish,
+      recipeId: entry.recipeId || '',
+      servings: entry.servings,
+      entryId: dragEntryId
+    });
+    await fetchAll();
+    toast(`Áthelyezve ✓`);
+  } catch(e) { toast('Hiba: ' + e.message); }
+
+  dragEntryId = null;
+}
+
+
   const ings = getIngredients('ingredient-list');
   if (ings.length === 0) { toast('Nincs hozzávaló a listán'); return; }
   try {

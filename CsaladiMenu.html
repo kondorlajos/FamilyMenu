@@ -1094,7 +1094,7 @@ async function dropEntry(targetDate, targetMeal) {
   dragEntryId = null;
 }
 
-
+async function addMealToShopping() {
   const ings = getIngredients('ingredient-list');
   if (ings.length === 0) { toast('Nincs hozzávaló a listán'); return; }
   try {

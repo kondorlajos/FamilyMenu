@@ -500,7 +500,7 @@
 // ============================================================
 // STATE
 // ============================================================
-const HARDCODED_API_URL = 'https://script.google.com/macros/s/AKfycbzZzPd3oYxR2pZcwcg3qY4n0pe-5-i9LxMHoU8kq8ldG7H_qEy0VoW4jhnHSJ37dVK17Q/exec';
+const HARDCODED_API_URL = 'https://script.google.com/macros/s/AKfycbw5mW1tabc0UERYYhtJa1BlSn6wMC_gF-B_nkW-TpK157PoWqe713upAwu5KHch36s8Pg/exec';
 let API_URL = HARDCODED_API_URL || localStorage.getItem('csaladiMenuApi') || '';
 let DEFAULT_SERVINGS = parseInt(localStorage.getItem('csaladiMenuServings') || '4');
 let weekOffset = 0; // current week offset from today
@@ -931,7 +931,12 @@ async function deleteMeal() {
 let deletingEntry = null;
 
 function openDeleteConfirm() {
-  deletingEntry = { id: editingEntryId, dish: document.getElementById('meal-dish-input').value };
+  deletingEntry = {
+    id: editingEntryId,
+    dish: document.getElementById('meal-dish-input').value,
+    date: editingDate,
+    meal: editingMeal
+  };
   document.getElementById('delete-confirm-dish').textContent = `"${deletingEntry.dish}"`;
   document.getElementById('delete-from-shopping-check').checked = false;
   document.getElementById('meal-modal').classList.remove('open');
@@ -944,10 +949,14 @@ function closeDeleteConfirm(e) {
 }
 
 async function confirmDeleteMeal() {
-  if (!deletingEntry?.id) return;
+  if (!deletingEntry?.id && !deletingEntry?.date) return;
   const alsoShopping = document.getElementById('delete-from-shopping-check').checked;
   try {
-    await api('deleteMeal', { entryId: deletingEntry.id });
+    await api('deleteMeal', {
+      entryId: deletingEntry.id || '',
+      date: deletingEntry.date || '',
+      meal: deletingEntry.meal || ''
+    });
 
     if (alsoShopping) {
       // Megkeressük a bevásárlólistán az étel hozzávalóit név alapján

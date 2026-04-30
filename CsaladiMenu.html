@@ -627,7 +627,11 @@ function getWeekDates() {
 }
 
 function dateStr(d) {
-  return d.toISOString().split('T')[0];
+  // Timezone-safe: helyi dátumot használ, nem UTC-t
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
 }
 
 const DAY_NAMES_FULL = ['Hétfő', 'Kedd', 'Szerda', 'Csütörtök', 'Péntek', 'Szombat', 'Vasárnap'];
